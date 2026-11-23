@@ -72,3 +72,19 @@ describe("wizard targets grid", () => {
     expect(parseHostPort("pi.local")).toEqual({ host: "pi.local", port: 7878 });
   });
 });
+
+describe("wizard keeps Services-page targets", () => {
+  const svc: Target = { id: "svc-github", name: "GitHub", kind: "http", url: "https://github.com", host: "github.com", intervalMs: 30000, enabled: true, group: "service" };
+  it("svc-* targets are not grid rows, do not count as 'configured', and survive apply", () => {
+    const cs = [cand("10.0.0.2")];
+    const conns = { "10.0.0.2": conn("a", [...defaults, svc]) };
+    const { rows, grid } = buildRows(cs, new Set(["10.0.0.2"]), conns, false);
+    expect(rows.some((r) => r.id === "svc-github")).toBe(false);
+    expect(grid.has(cellKey("base-cf", "10.0.0.2"))).toBe(true); // still treated as a fresh agent
+    const out = targetsFor(rows, grid, "10.0.0.2", [...defaults, svc]);
+    expect(out.filter((t) => t.id === "svc-github")).toEqual([svc]);
+    // also when editing with every grid cell cleared
+    const edit = buildRows(cs, new Set(["10.0.0.2"]), conns, true);
+    expect(targetsFor(edit.rows, new Set(), "10.0.0.2", [...defaults, svc]).map((t) => t.id)).toEqual(["svc-github"]);
+  });
+});

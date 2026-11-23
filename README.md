@@ -12,6 +12,9 @@ them, pairs with them, controls them and graphs everything.
   recognises agents that are already running and pairs with them.
 * **One-click agent install/removal over SSH** for Linux nodes (removal deletes the binary, service, config, tokens and history).
 * **Stacked graphs** per node and target with loss shading, hover, drag-to-zoom, ranges from 5 minutes to 2 months.
+* **Services page** – watch 45+ popular services (Microsoft Azure/365, Google Cloud/Workspace, AWS, Oracle Cloud, Atlassian, Anthropic, OpenAI,
+  GitHub, Slack, Zoom, Stripe, TD, BMO, RBC, Scotiabank…): official status feeds plus reachability measured from the nodes you choose
+  (or the desktop), with desktop notifications when a service goes down or recovers. Add your own services too.
 * Packet loss, jitter, p95, uptime/SLA, incidents timeline, alerts (notifications, webhook), traceroute, speed tests,
   Tailscale direct/relay detection, CSV/PNG/PDF export, menu-bar / tray status, automatic updates.
 
@@ -57,6 +60,15 @@ cd desktop && npm ci && npx tauri build   # Windows/Linux app (Tauri 2)
 ```
 Repository layout: `agent/` (Go), `app/` (SwiftUI macOS app), `desktop/` (Tauri app), `docs/API.md` (agent HTTP API),
 `scripts/` (agent install scripts), `assets/` (icon).
+
+## Services
+
+Pick services on the **Services** page, then choose where to measure them from: any of your nodes (the node keeps the history
+even when the app is closed) and/or the desktop app itself (only collects data while the app is running).
+Official status comes from each vendor's public feed (Atlassian Statuspage, Google/AWS/Azure feeds, Slack, Stripe).
+Services without a public feed, such as the banks, are watched by reachability only. The catalog lives in
+[`services/catalog.json`](services/catalog.json) — pull requests adding services are welcome
+(run `python3 scripts/gen-catalog.py` after editing).
 
 ## Releases & auto-update
 

@@ -5,13 +5,14 @@ struct RootView: View {
     @EnvironmentObject var model: AppModel
     var body: some View {
         HStack(spacing: 0) {
-            Sidebar().frame(width: 230)
+            Sidebar(services: model.services).frame(width: 230)
             Rectangle().fill(Theme.line).frame(width: 1)
             Group {
                 switch model.route {
                 case .overview: OverviewView()
                 case .node(let id): if let n = model.nodes.first(where: { $0.id == id }) { NodeView(node: n).id(id) } else { OverviewView() }
                 case .incidents: AllIncidentsView()
+                case .services: ServicesView(sv: model.services)
                 case .settings: SettingsView()
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -30,6 +31,7 @@ struct RootView: View {
 
 struct Sidebar: View {
     @EnvironmentObject var model: AppModel
+    @ObservedObject var services: ServicesModel
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
@@ -38,6 +40,7 @@ struct Sidebar: View {
             }.padding(16)
             item("Overview", "square.grid.3x3.fill", .overview)
             item("Incidents", "exclamationmark.triangle", .incidents, badge: model.nodes.flatMap(\.incidents).filter(\.isOpen).count)
+            item("Services", "cloud", .services, badge: services.problemCount)
             Text("NODES").font(Theme.mono(9, .semibold)).tracking(1.5).foregroundStyle(Theme.faint).padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 6)
             ScrollView {
                 VStack(spacing: 0) {

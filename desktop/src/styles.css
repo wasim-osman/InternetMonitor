@@ -228,3 +228,22 @@ select.field { padding: 5px 6px; }
 .sechdr { padding: 10px 0 4px; }
 .cell { width: 18px; height: 18px; border: 1px solid var(--faint); border-radius: 2px; background: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: #000; padding: 0; }
 .cell.on { background: var(--amber); border-color: var(--amber); }
+
+/* services */
+.svcpage { display: flex; min-height: 0; }
+.svccat { width: 270px; flex: none; display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+.scat { font: 600 9px var(--mono); letter-spacing: 1.5px; color: var(--faint); padding: 12px 12px 4px; }
+.srv { display: flex; align-items: center; gap: 8px; padding: 5px 12px; cursor: pointer; font-size: 12px; border-left: 2px solid transparent; }
+.srv:hover { background: rgba(255,255,255,.02); }
+.srv.on { color: var(--amber); background: rgba(255,176,0,.06); border-left-color: var(--amber); }
+.srv input { accent-color: var(--amber); margin: 0; flex: none; }
+.saddf { border-top: 1px solid var(--line); }
+.svccards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.schip { font: 700 9px var(--mono); letter-spacing: .8px; padding: 2px 6px; border: 1px solid; border-radius: 2px; flex: none; }
+.sbul { width: 6px; height: 6px; border-radius: 1px; flex: none; margin-top: 5px; }
+.srow { min-height: 20px; color: var(--dim); }
+.srow .small { color: var(--text); }
+.srow small { font: 9px var(--mono); color: var(--dim); }
+.sspark { width: 120px; height: 22px; flex: none; }
+.svcwarn { font: 9px var(--mono); color: var(--amber); padding-left: 40px; }
+.ssum { overflow-wrap: anywhere; }

@@ -9,6 +9,7 @@ export default defineConfig({
     strictPort: true,
     host: host || false,
     watch: { ignored: ["**/src-tauri/**"] },
+    fs: { allow: [".", "../services"] }, // services/catalog.json is imported at build time
   },
   build: {
     target: "es2021",

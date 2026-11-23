@@ -10,7 +10,7 @@ enum TimeRange: String, CaseIterable, Identifiable {
     var refreshSec: TimeInterval { switch self { case .m5: 4; case .h1: 8; case .h6: 30; case .h24: 60; case .d7: 180; case .d30, .d60: 300 } }
 }
 
-enum Route: Hashable { case overview, node(String), incidents, settings }
+enum Route: Hashable { case overview, node(String), incidents, services, settings }
 
 @MainActor
 final class NodeState: ObservableObject, Identifiable {
@@ -58,6 +58,7 @@ final class AppModel: ObservableObject {
 
     let store = NodeStore()
     let updater = Updater()
+    lazy var services = ServicesModel(app: self)
     private var liveTask: Task<Void, Never>?
     private var slowTask: Task<Void, Never>?
     private var previous: [String: LinkState] = [:]   // "node|target" → state
@@ -87,6 +88,7 @@ final class AppModel: ObservableObject {
         started = true
         requestNotificationPermission()
         updater.start()
+        services.start()
         liveTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -158,6 +160,7 @@ final class AppModel: ObservableObject {
             let tname = n.config?.targets.first { $0.id == id }?.name ?? id
             switch t.state {
             case .down: notify("\(n.name) → \(tname) DOWN", t.lastError ?? "No response", id: key)
+            case .degraded where n.config?.targets.first(where: { $0.id == id })?.group == "service": break
             case .degraded: notify("\(n.name) → \(tname) degraded", "Latency \(Fmt.ms(t.avgMs)) ms avg", id: key)
             case .up: notify("\(n.name) → \(tname) recovered", "Back to normal (\(Fmt.ms(t.lastRttMs)) ms)", id: key)
             case .unknown: break

@@ -10,6 +10,8 @@ import { overviewView } from "./views/overview";
 import { incidentsView, settingsView } from "./views/pages";
 import type { View } from "./views/view";
 import { Wizard } from "./views/wizard";
+import { servicesView } from "./views/services";
+import { services } from "./servicesModel";
 import { runSelftest } from "./selftest";
 
 const root = document.getElementById("app")!;
@@ -40,6 +42,7 @@ function sidebar() {
   patch(side, `<div class="brand"><span style="color:${C.amber}">${icons.pulse(16)}</span><span>INTERNET MONITOR</span></div>
     ${item("Overview", icons.grid(15), { kind: "overview" })}
     ${item("Incidents", icons.alert(15), { kind: "incidents" }, openInc)}
+    ${item("Services", icons.cloud(15), { kind: "services" }, services.badCount)}
     <div class="sidehdr">NODES</div>
     <div class="nodelist scroll" data-scroll="nodes">${nodes || `<div class="mono10 faint pad16">No nodes yet</div>`}</div>
     <div class="pad12"><button class="btn wide" data-act="add-nodes">${icons.plus(13)} ADD NODES</button></div>
@@ -53,7 +56,7 @@ function ensureView() {
   view?.destroy?.();
   viewBox.innerHTML = "";
   const r = model.route;
-  view = r.kind === "overview" ? overviewView() : r.kind === "node" ? nodeView(model.node(r.id)!) : r.kind === "incidents" ? incidentsView() : settingsView();
+  view = r.kind === "overview" ? overviewView() : r.kind === "node" ? nodeView(model.node(r.id)!) : r.kind === "incidents" ? incidentsView() : r.kind === "services" ? servicesView() : settingsView();
   viewKey = key;
   viewBox.appendChild(view.el);
 }
@@ -88,12 +91,14 @@ document.addEventListener("contextmenu", (e) => {
 async function boot() {
   try {
     await model.init();
+    services.init();
   } catch (e) {
     toast("Startup failed: " + String(e), 10000);
   }
   model.subscribe(render);
   render();
   model.start();
+  services.start();
   startUpdater();
   if (model.info.selftest) runSelftest(() => wizard);
 }

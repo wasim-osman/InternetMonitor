@@ -1,6 +1,7 @@
 //! Persistent files in the OS app-data dir: nodes.json (agent tokens, 0600 on unix) and settings.json.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -30,11 +31,14 @@ pub struct Settings {
     pub notifications: bool,
     pub tray: bool,
     pub auto_update: bool,
+    /// Services page selection (shape owned by the frontend: src/services.ts `ServiceSettings`).
+    #[serde(skip_serializing_if = "Value::is_null")]
+    pub services: Value,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { notifications: true, tray: true, auto_update: true }
+        Settings { notifications: true, tray: true, auto_update: true, services: Value::Null }
     }
 }
 
@@ -118,6 +122,12 @@ mod tests {
         std::fs::write(d.join("nodes.json"), r#"[{"nodeId":"x","name":"n","host":"h","token":"k","addedAt":"2026-01-01T00:00:00Z"}]"#).unwrap();
         assert_eq!(load_nodes(&d)[0].port, 7878);
         assert_eq!(load_settings(&d), Settings::default());
+        // services selection round-trips opaquely; old settings files without it still load
+        let st = Settings { services: serde_json::json!({"selected": ["github"], "desktop": true}), ..Settings::default() };
+        save_settings(&d, &st).unwrap();
+        assert_eq!(load_settings(&d), st);
+        std::fs::write(d.join("settings.json"), r#"{"notifications":false,"tray":true,"autoUpdate":true}"#).unwrap();
+        assert!(load_settings(&d).services.is_null());
         std::fs::remove_dir_all(&d).ok();
     }
 }

@@ -1,6 +1,7 @@
 // App model: saved nodes, polling, notifications, tray status. Mirrors AppModel.swift.
 import { Agent, AgentError, api, errText } from "./api";
 import { ms, worstOf } from "./fmt";
+import { effectiveState } from "./services";
 import type {
   AgentConfig, AppInfo, Identity, Incident, LinkState, LiveTarget, SavedNode, Series, Settings, SpeedResult, SummaryWindow,
   SystemInfo, Target, UpdateInfo,
@@ -19,7 +20,7 @@ export type RangeId = (typeof RANGES)[number]["id"];
 
 export const HISTORY_DAYS = 60;
 
-export type Route = { kind: "overview" } | { kind: "node"; id: string } | { kind: "incidents" } | { kind: "settings" };
+export type Route = { kind: "overview" } | { kind: "node"; id: string } | { kind: "incidents" } | { kind: "services" } | { kind: "settings" };
 
 export class NodeState {
   identity?: Identity;
@@ -193,14 +194,16 @@ class Model {
   private evaluate(n: NodeState, m: Record<string, LiveTarget>) {
     for (const [id, t] of Object.entries(m)) {
       const key = `${n.id}|${id}`;
+      const tgt = n.config?.targets.find((x) => x.id === id);
+      const tname = tgt?.name ?? id;
+      const state = effectiveState(id, tgt?.group, t.state);
       const old = this.previous.get(key);
-      this.previous.set(key, t.state);
-      if (old === undefined || old === t.state) continue;
-      if (old === "unknown" && t.state !== "down") continue;
-      const tname = n.config?.targets.find((x) => x.id === id)?.name ?? id;
-      if (t.state === "down") this.notify(`${n.name} → ${tname} DOWN`, t.lastError ?? "No response");
-      else if (t.state === "degraded") this.notify(`${n.name} → ${tname} degraded`, `Latency ${ms(t.avgMs)} ms avg`);
-      else if (t.state === "up") this.notify(`${n.name} → ${tname} recovered`, `Back to normal (${ms(t.lastRttMs)} ms)`);
+      this.previous.set(key, state);
+      if (old === undefined || old === state) continue;
+      if (old === "unknown" && state !== "down") continue;
+      if (state === "down") this.notify(`${n.name} → ${tname} DOWN`, t.lastError ?? "No response");
+      else if (state === "degraded") this.notify(`${n.name} → ${tname} degraded`, `Latency ${ms(t.avgMs)} ms avg`);
+      else if (state === "up") this.notify(`${n.name} → ${tname} recovered`, `Back to normal (${ms(t.lastRttMs)} ms)`);
     }
   }
 

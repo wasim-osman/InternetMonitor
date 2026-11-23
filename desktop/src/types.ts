@@ -237,6 +237,8 @@ export interface Settings {
   notifications: boolean;
   tray: boolean;
   autoUpdate: boolean;
+  /** Services page selection (normalised by services.ts normalizeSettings) */
+  services?: unknown;
 }
 
 export interface AppInfo {

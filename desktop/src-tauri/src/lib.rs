@@ -3,6 +3,7 @@
 pub mod agent;
 pub mod discovery;
 pub mod icmp;
+pub mod services;
 pub mod ssh;
 pub mod store;
 pub mod tray;
@@ -241,6 +242,16 @@ fn notify(app: AppHandle, state: State<'_, AppState>, title: String, body: Strin
 }
 
 #[tauri::command]
+async fn service_status(adapter: String, url: Option<String>) -> services::Official {
+    services::fetch_official(&adapter, url.as_deref()).await
+}
+
+#[tauri::command]
+async fn service_probe(url: String) -> services::ProbeResult {
+    services::probe(&url).await
+}
+
+#[tauri::command]
 fn tray_update(app: AppHandle, level: String, tooltip: String, lines: Vec<String>) -> Result<(), String> {
     tray::update(&app, &level, &tooltip, &lines).map_err(|e| e.to_string())
 }
@@ -410,6 +421,8 @@ pub fn run() {
             ssh_install_agent,
             remove_agent,
             notify,
+            service_status,
+            service_probe,
             tray_update,
             open_url,
             save_text_file,

@@ -1,5 +1,6 @@
 // Pure state for the setup wizard's Targets grid (mirrors WizardModel.swift buildRows & co).
 import { endpointKey } from "./fmt";
+import { SVC_PREFIX } from "./services";
 import type { AgentConfig, Candidate, Identity, ProbeKind, Target } from "./types";
 
 export type Phase = "checking" | "noAgent" | "needsCode" | "working" | "ready" | "failed";
@@ -34,6 +35,9 @@ export interface WCandidate extends Candidate {
 
 export const cellKey = (rowId: string, ip: string) => `${rowId}@@${ip}`;
 
+/** Service targets (`svc-*`) belong to the Services page: hidden from the grid, always preserved. */
+const gridTargets = (c: AgentConfig | undefined): Target[] => (c?.targets ?? []).filter((t) => !t.id.startsWith(SVC_PREFIX));
+
 function displayName(id: Identity | null | undefined): string | undefined {
   if (!id) return undefined;
   return id.nodeName || id.hostname || id.nodeId;
@@ -60,18 +64,18 @@ export function buildRows(candidates: WCandidate[], selected: Set<string>, conns
   for (const c of sel) {
     const cfg = conns[c.ip]?.config;
     if (!cfg) continue;
-    for (const t of cfg.targets) {
+    for (const t of gridTargets(cfg)) {
       anyExisting = true;
       const r = out.find((x) => x.id === t.id || endpointKey(x.template) === endpointKey(t));
       if (r) g.add(cellKey(r.id, c.ip));
       else { out.push({ id: t.id, template: t, section: t.group === "custom" ? "Custom" : "Existing" }); g.add(cellKey(t.id, c.ip)); }
     }
   }
-  if (!anyExisting || (!editing && sel.every((c) => (conns[c.ip]?.config?.targets.length ?? 0) <= 3))) {
+  if (!anyExisting || (!editing && sel.every((c) => gridTargets(conns[c.ip]?.config).length <= 3))) {
     // fresh agents (only built-in defaults) → everyone pings everyone else + baselines
     g = new Set();
     for (const r of out) if (r.section === "Nodes" || r.section === "Baseline") for (const c of sel) if (r.forNodeIP !== c.ip) g.add(cellKey(r.id, c.ip));
-    for (const c of sel) for (const t of conns[c.ip]?.config?.targets ?? []) {
+    for (const c of sel) for (const t of gridTargets(conns[c.ip]?.config)) {
       if (!out.some((x) => endpointKey(x.template) === endpointKey(t))) { out.push({ id: t.id, template: t, section: "Existing" }); g.add(cellKey(t.id, c.ip)); }
     }
   }
@@ -106,12 +110,13 @@ export function customTarget(kind: ProbeKind, name: string, host: string, port: 
 }
 
 export function targetsFor(rows: TargetRow[], grid: Set<string>, ip: string, old: Target[]): Target[] {
-  return rows.filter((r) => grid.has(cellKey(r.id, ip))).map((r) => {
+  const picked = rows.filter((r) => grid.has(cellKey(r.id, ip))).map((r) => {
     const t = { ...r.template };
     const prev = old.find((o) => o.id === t.id);
     if (prev) t.intervalMs = prev.intervalMs; // keep existing per-target interval overrides
     return t;
   });
+  return [...picked, ...old.filter((t) => t.id.startsWith(SVC_PREFIX) && !picked.some((p) => p.id === t.id))];
 }
 
 /** "host", "host:port", "[v6]:port" → {host, port}. */

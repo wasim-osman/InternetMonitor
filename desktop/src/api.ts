@@ -1,10 +1,13 @@
 // Typed wrappers around the Rust commands (src-tauri/src/lib.rs).
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { Official } from "./services";
 import type {
   AgentConfig, AppInfo, Candidate, ClientInfo, Identity, Incident, LiveResponse, PairCode, PairResponse,
   RemoveResult, SavedNode, SeriesResponse, Settings, SpeedResult, SummaryResponse, SystemInfo, TraceResult, UpdateInfo,
 } from "./types";
+
+export interface ProbeResult { ok: boolean; ms?: number | null; status?: number | null; error?: string | null }
 
 export class AgentError extends Error {
   constructor(public status: number, message: string) {
@@ -79,6 +82,8 @@ export const api = {
   sshFetchPairCode: (user: string, host: string) => invoke<string>("ssh_fetch_pair_code", { user, host }),
   sshInstallAgent: (user: string, host: string) => invoke<void>("ssh_install_agent", { user, host }),
   removeAgent: (host: string, sshUser: string | null) => invoke<RemoveResult>("remove_agent", { host, sshUser }),
+  serviceStatus: (adapter: string, url: string | null) => invoke<Official>("service_status", { adapter, url }),
+  serviceProbe: (url: string) => invoke<ProbeResult>("service_probe", { url }),
   notify: (title: string, body: string) => invoke<void>("notify", { title, body }),
   trayUpdate: (level: string, tooltip: string, lines: string[]) => invoke<void>("tray_update", { level, tooltip, lines }),
   openUrl: (url: string) => invoke<void>("open_url", { url }),

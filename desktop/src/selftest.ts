@@ -3,6 +3,8 @@
 // report on stdout ("SELFTEST {...}") via the selftest_report command.
 import { Agent, api, errText } from "./api";
 import { seriesCSV } from "./fmt";
+import { DESKTOP_WARNING } from "./services";
+import { services } from "./servicesModel";
 import { model } from "./state";
 import { stackFor } from "./views/common";
 import type { Wizard } from "./views/wizard";
@@ -103,6 +105,8 @@ export async function runSelftest(getWizard: () => Wizard | null) {
     const st = text(".view").join(" ");
     check("settingsAbout", st.includes("Developed by Wasim Osman") && st.includes("github.com/wasim-osman/InternetMonitor") && st.includes("MIT"), st.slice(0, 400));
     check("settingsToggles", document.querySelectorAll('.view input[type="checkbox"]').length === 4);
+    // 6. Services page against real status feeds + APPLY to the dev agent
+    await servicesSelftest(n, check);
     // 6. updater check against the real GitHub API
     try { const u = await api.updateCheck(); R.updateCheck = u; } catch (e) { R.updateCheck = "error: " + errText(e); }
     // 7. tray + notification commands
@@ -113,4 +117,83 @@ export async function runSelftest(getWizard: () => Wizard | null) {
   R.errors = errors;
   R.pass = errors.length === 0;
   await api.selftestReport(JSON.stringify(R));
+}
+
+type Check = (name: string, ok: boolean, detail?: unknown) => void;
+
+async function servicesSelftest(n: import("./state").NodeState, check: Check) {
+  const $ = <T extends HTMLElement = HTMLInputElement>(sel: string) => document.querySelector<T>(sel);
+  const svcIds = (c: { targets: { id: string }[] }) => c.targets.map((t) => t.id).filter((id) => id.startsWith("svc-")).sort();
+  model.go({ kind: "services" }); await sleep(800);
+  check("svcNav", text(".sidebar .nav").some((t) => t.startsWith("SERVICES")), text(".sidebar .nav"));
+  check("svcCatalog", document.querySelectorAll(".svccat .srv").length >= 46, document.querySelectorAll(".svccat .srv").length);
+  const pick = ["atlassian", "github", "td"];
+  for (const id of pick) $(`input[data-in="svc-toggle"][data-id="${id}"]`)?.click();
+  await sleep(300);
+  check("svcSelected", pick.every((id) => services.isSelected(id)), services.st.selected);
+  await until(() => pick.every((id) => services.official.has(id)), 20000);
+  await sleep(300);
+  const off = Object.fromEntries(pick.map((id) => [id, services.official.get(id)?.data]));
+  check("svcOfficial", ["atlassian", "github"].every((id) => off[id] && off[id]!.state !== "unknown" && !off[id]!.error) && off.td?.state === "unknown",
+    Object.fromEntries(pick.map((id) => [id, off[id] ? `${off[id]!.state}: ${off[id]!.summary}` : null])));
+  check("svcCards", text(".svccard").length === 3 && text(".svccard .schip").length === 3, text(".svccard .schip"));
+  check("svcNoFeedText", text('.svccard[data-id="td"] .ssum')[0] === "No public status feed — reachability only", text('.svccard[data-id="td"] .ssum'));
+  // desktop toggle → warning + local probes
+  check("svcWarnHiddenWhenOff", !$(".svcwarn"));
+  $('input[data-in="svc-desktop"]')?.click();
+  await sleep(400);
+  check("svcDesktopWarning", $<HTMLElement>(".svcwarn")?.innerText.trim() === DESKTOP_WARNING, $<HTMLElement>(".svcwarn")?.innerText);
+  await until(() => pick.every((id) => (services.reach.get(id)?.samples.length ?? 0) > 0), 20000);
+  check("svcDesktopProbe", pick.every((id) => services.reach.get(id)?.state === "up"),
+    Object.fromEntries(pick.map((id) => { const r = services.reach.get(id); return [id, r ? `${r.state} ${r.lastMs?.toFixed(0)}ms ${r.lastError ?? ""}` : null]; })));
+  await sleep(300);
+  check("svcDesktopRows", document.querySelectorAll('.svccard [data-src="desktop"]').length === 3, text('.svccard [data-src="desktop"]'));
+  // node toggle → hint → APPLY → svc-* in the agent config
+  const before = await n.agent.config();
+  const others = before.targets.filter((t) => !t.id.startsWith("svc-")).map((t) => t.id);
+  $(`input[data-in="svc-node"][data-id="${CSS.escape(n.id)}"]`)?.click();
+  await sleep(400);
+  check("svcNotAppliedHint", text(".svccard").every((t) => t.includes("Not applied yet — press APPLY")), text('.svccard [data-src="node"]'));
+  check("svcApplyEnabled", !$<HTMLButtonElement>('[data-act="svc-apply"]')?.disabled);
+  $<HTMLElement>('[data-act="svc-apply"]')?.click();
+  await until(() => !services.applying && !!services.applyResults[n.id], 15000);
+  const after = await n.agent.config();
+  const t = after.targets.find((x) => x.id === "svc-github");
+  check("svcApplyAdded", JSON.stringify(svcIds(after)) === JSON.stringify(["svc-atlassian", "svc-github", "svc-td"])
+    && t?.kind === "http" && t.url === "https://github.com" && t.host === "github.com" && t.intervalMs === 30000 && t.group === "service" && t.enabled
+    && JSON.stringify(after.targets.filter((x) => !x.id.startsWith("svc-")).map((x) => x.id)) === JSON.stringify(others),
+    { result: services.applyResults[n.id], svc: svcIds(after), github: t });
+  await sleep(400);
+  check("svcApplyDisabledAfter", !!$<HTMLButtonElement>('[data-act="svc-apply"]')?.disabled && !services.applyNeeded);
+  await until(() => ["svc-atlassian", "svc-github", "svc-td"].every((id) => n.live[id] && n.live[id].state !== "unknown"), 45000);
+  await sleep(500);
+  check("svcNodeLive", text('.svccard [data-src="node"]').length === 3 && text('.svccard [data-src="node"]').every((x) => / ms$|DOWN/.test(x)),
+    { rows: text('.svccard [data-src="node"]'), live: ["svc-atlassian", "svc-github", "svc-td"].map((id) => `${id}:${n.live[id]?.state}:${n.live[id]?.lastRttMs}`) });
+  // custom service via the form (status base URL → summary.json)
+  const setVal = (k: string, v: string) => { const i = $(`input[data-k="svc-f-${k}"]`)!; i.value = v; i.dispatchEvent(new Event("input", { bubbles: true })); };
+  setVal("name", "GH custom"); setVal("probe", "api.github.com"); setVal("status", "https://www.githubstatus.com/");
+  $<HTMLElement>('[data-act="svc-cadd"]')?.click();
+  const cst = services.st.custom[0];
+  await until(() => !!cst && services.official.has(cst.id), 15000);
+  check("svcCustom", !!cst && cst.statusUrl === "https://www.githubstatus.com/api/v2/summary.json" && services.isSelected(cst.id) && services.official.get(cst.id)?.data.state !== "unknown",
+    { custom: cst, official: cst && services.official.get(cst.id)?.data.state });
+  $<HTMLElement>(`[data-act="svc-del"][data-id="${cst?.id}"]`)?.click();
+  await sleep(300);
+  $<HTMLElement>('.modal [data-r="1"]')?.click();
+  await sleep(300);
+  check("svcCustomDeleted", services.st.custom.length === 0 && !services.isSelected(cst?.id ?? ""));
+  // deselect → APPLY → removed again, other targets untouched
+  for (const id of pick) $(`input[data-in="svc-toggle"][data-id="${id}"]`)?.click();
+  await sleep(300);
+  $<HTMLElement>('[data-act="svc-apply"]')?.click();
+  await until(() => !services.applying, 15000);
+  await sleep(300);
+  const gone = await n.agent.config();
+  check("svcApplyRemoved", svcIds(gone).length === 0 && JSON.stringify(gone.targets.map((x) => x.id)) === JSON.stringify(others),
+    { result: services.applyResults[n.id], targets: gone.targets.map((x) => x.id) });
+  $('input[data-in="svc-desktop"]')?.click();
+  await sleep(300);
+  check("svcDesktopOff", !$(".svcwarn") && !services.st.desktop);
+  const saved = await api.settingsGet();
+  check("svcPersisted", JSON.stringify((saved.services as { nodes?: string[] })?.nodes) === JSON.stringify([n.id]), saved.services);
 }

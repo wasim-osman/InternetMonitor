@@ -16,7 +16,10 @@ desktop/
     state.ts                       model: saved nodes, polling (live 2 s / slow 5 s), notifications, tray status
     chart.ts                       hand-rolled canvas latency chart (band, avg, loss, crosshair, drag-zoom)
     wizardLogic.ts                 pure Targets-grid logic (unit tested)
-    views/                         overview, node (latency/incidents/diagnostics/control), incidents, settings, wizard
+    services.ts                    Services: catalog (imports ../services/catalog.json at build time), svc-* target
+                                   reconcile, notification + reachability rules (pure, unit tested)
+    servicesModel.ts               Services runtime: official-status polling, desktop probes, APPLY to nodes
+    views/                         overview, node (latency/incidents/diagnostics/control), incidents, services, settings, wizard
     updater.ts                     update scheduling + banner
     selftest.ts                    in-webview end-to-end self-test (IM_SELFTEST=1 only)
   scripts/copy-agents.mjs          copies ../agent/dist/imonitord-linux-* → src-tauri/resources/agents
@@ -25,10 +28,11 @@ desktop/
     src/discovery.rs               interfaces, /24../22 sweeps, Tailscale peers, identity probes, rDNS, nodeId dedupe
     src/icmp.rs                    ICMP: SOCK_DGRAM/IPPROTO_ICMP (Linux/macOS), IcmpSendEcho (Windows), TCP fallback
     src/ssh.rs                     system ssh/scp (BatchMode): pair-code, install, uninstall (script verbatim from SSHInstaller.swift)
+    src/services.rs                official status adapters (statuspage, gcp, aws UTF-16, rss, slack, stripe, none) + probes
     src/store.rs                   nodes.json (0600 on unix) + settings.json in the OS app-data dir
     src/updater.rs                 GitHub-releases updater with SHA-256 verification
     src/tray.rs                    status-coloured tray icon + menu
-    tests/                         live-agent integration tests (ignored by default) + updater HTTP test
+    tests/                         live-agent + live-services tests (ignored by default) + updater HTTP test
 ```
 
 Data dir: `%APPDATA%\com.wasim.internetmonitor` (Windows), `~/.local/share/com.wasim.internetmonitor` (Linux),
@@ -58,10 +62,12 @@ npm run typecheck && npm test                       # tsc + vitest (formatting, 
 cd src-tauri && cargo test && cargo clippy --all-targets
 # against a real agent (e.g. agent/dist/imonitord-darwin-arm64 --listen 127.0.0.1:7899 --state-dir /tmp/st):
 IM_TEST_AGENT=127.0.0.1:7899 cargo test --test live_agent -- --ignored --nocapture
+cargo test --test live_services -- --ignored --nocapture   # every catalog feed + probe URL, real internet
 ```
 
 End-to-end UI self-test (drives the real webview: wizard scan → manual add → pair → targets → apply →
-overview / node tabs / export / settings, then prints `SELFTEST {json}` and exits):
+overview / node tabs / export / Services (Atlassian + GitHub + TD: real feeds, desktop probes, APPLY adds and
+removes `svc-*` targets on the agent, custom service) / settings, then prints `SELFTEST {json}` and exits):
 
 ```sh
 IM_DATA_DIR=/tmp/im-data IM_SELFTEST=1 IM_SELFTEST_EXIT=1 IM_SELFTEST_AGENT=127.0.0.1:7899 \
@@ -69,6 +75,16 @@ IM_DATA_DIR=/tmp/im-data IM_SELFTEST=1 IM_SELFTEST_EXIT=1 IM_SELFTEST_AGENT=127.
 ```
 
 (Self-test mode allows adding a loopback agent, which the wizard otherwise rejects as "this machine".)
+
+## Services page
+
+Pick services from `../services/catalog.json` (or add custom ones: name, probe URL, optional Statuspage URL —
+a base URL becomes `<base>/api/v2/summary.json`). The app fetches each selected service's official status in
+Rust (every 90 s; gcp/aws every 5 min; 10 s timeout) and notifies on state changes / new incidents.
+"Monitor from": per-node toggles + **APPLY** reconcile `svc-<id>` HTTP targets (group `service`, 30 s) in each
+node's `/v1/config` (other targets untouched; the wizard hides and preserves them). "This computer" probes each
+service every 30 s while the app runs (any HTTP response = reachable; down after 3 failures). Node targets in
+group `service` never raise "degraded" notifications. Selection is stored in `settings.json` (`services`).
 
 ## Release assets (what CI uploads)
 

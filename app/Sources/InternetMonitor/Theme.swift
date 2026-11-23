@@ -87,15 +87,20 @@ struct StatBlock: View {
 struct IndustrialButtonStyle: ButtonStyle {
     var prominent = false
     var danger = false
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(Theme.mono(11, .semibold)).tracking(0.8)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .foregroundStyle(prominent ? Color.black : (danger ? Theme.red : Theme.text))
-            .background(prominent ? Theme.amber : Theme.panel2)
-            .overlay(RoundedRectangle(cornerRadius: 3).stroke(prominent ? Theme.amber : (danger ? Theme.red.opacity(0.6) : Theme.line)))
-            .clipShape(RoundedRectangle(cornerRadius: 3))
-            .opacity(configuration.isPressed ? 0.7 : 1)
+    func makeBody(configuration: Configuration) -> some View { StyledLabel(configuration: configuration, prominent: prominent, danger: danger) }
+    struct StyledLabel: View {
+        let configuration: Configuration; let prominent: Bool; let danger: Bool
+        @Environment(\.isEnabled) private var enabled
+        var body: some View {
+            configuration.label
+                .font(Theme.mono(11, .semibold)).tracking(0.8)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .foregroundStyle(prominent ? Color.black : (danger ? Theme.red : Theme.text))
+                .background(prominent ? Theme.amber : Theme.panel2)
+                .overlay(RoundedRectangle(cornerRadius: 3).stroke(prominent ? Theme.amber : (danger ? Theme.red.opacity(0.6) : Theme.line)))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .opacity(!enabled ? 0.35 : (configuration.isPressed ? 0.7 : 1))
+        }
     }
 }
 extension ButtonStyle where Self == IndustrialButtonStyle {

@@ -3,7 +3,7 @@
 # binaries (used by the one-click SSH install). Also writes dist/InternetMonitor-macOS-universal.zip for releases.
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION="${VERSION:-1.0.0}"
+VERSION="${VERSION:-1.1.0}"
 APP=dist/InternetMonitor.app
 [ -f agent/dist/imonitord-linux-arm64 ] || (cd agent && make release)
 (cd app && swift build -c release --arch arm64 --arch x86_64 --product InternetMonitor)

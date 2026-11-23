@@ -50,7 +50,8 @@ final class WizardModel: ObservableObject {
         selfIPs = Set(Discovery.localInterfaces().map(\.ip))
         if editing {
             for n in model.nodes {
-                let c = Candidate(ip: n.saved.host, name: n.name, network: "Saved", isTailscale: Discovery.isTailscaleIP(n.saved.host), agent: n.identity)
+                let c = Candidate(ip: n.saved.host, name: n.name, network: "Saved", isTailscale: Discovery.isTailscaleIP(n.saved.host), agent: n.identity,
+                                  extraIPs: [n.system?.tailscale?.selfIp].compactMap { $0 })
                 candidates.append(c); selected.insert(c.ip)
                 conns[c.ip] = Conn(phase: .ready, identity: n.identity, token: n.saved.token, sshUser: n.saved.sshUser ?? "", recognised: true, config: n.config)
             }
@@ -217,7 +218,7 @@ final class WizardModel: ObservableObject {
         let sel = candidates.filter { selected.contains($0.ip) }
         for c in sel {
             let nid = conns[c.ip]?.identity?.nodeId ?? c.ip
-            out.append(TargetRow(id: "node-\(nid)", template: Target(id: "node-\(nid)", name: conns[c.ip]?.identity?.displayName ?? c.name, kind: .icmp, host: c.ip, group: "node", nodeRef: conns[c.ip]?.identity?.nodeId), section: "Nodes", forNodeIP: c.ip))
+            out.append(TargetRow(id: "node-\(nid)", template: Target(id: "node-\(nid)", name: conns[c.ip]?.identity?.displayName ?? c.name, kind: .icmp, host: Self.peerAddress(c), group: "node", nodeRef: conns[c.ip]?.identity?.nodeId), section: "Nodes", forNodeIP: c.ip))
         }
         out.append(TargetRow(id: "base-gw", template: Target(id: "base-gw", name: "Gateway", kind: .icmp, host: "@gateway", group: "baseline"), section: "Baseline"))
         out.append(TargetRow(id: "base-cf", template: Target(id: "base-cf", name: "Cloudflare DNS", kind: .icmp, host: "1.1.1.1", group: "baseline"), section: "Baseline"))
@@ -240,6 +241,13 @@ final class WizardModel: ObservableObject {
                 out.append(TargetRow(id: t.id, template: t, section: "Existing")); g.insert("\(t.id)@@\(ip)") } }
         }
         rows = out; grid = g
+    }
+
+    /// Address other nodes should use to reach this one. A Tailscale address works from anywhere on the tailnet,
+    /// whereas a LAN address only works from the same network, so prefer it.
+    static func peerAddress(_ c: Candidate) -> String {
+        if c.isTailscale { return c.ip }
+        return c.extraIPs.first(where: Discovery.isTailscaleIP) ?? c.ip
     }
 
     func toggle(_ row: TargetRow, _ ip: String) {
