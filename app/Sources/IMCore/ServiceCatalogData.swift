@@ -266,6 +266,15 @@ public enum ServiceCatalogData {
    "probeUrl": "https://discord.com"
   },
   {
+   "id": "msgraph",
+   "name": "Microsoft Graph API",
+   "category": "Productivity",
+   "adapter": "none",
+   "statusUrl": null,
+   "pageUrl": "https://status.cloud.microsoft",
+   "probeUrl": "https://graph.microsoft.com"
+  },
+  {
    "id": "github",
    "name": "GitHub",
    "category": "Developer",
@@ -318,6 +327,15 @@ public enum ServiceCatalogData {
    "statusUrl": null,
    "pageUrl": "https://status.datadoghq.com",
    "probeUrl": "https://www.datadoghq.com"
+  },
+  {
+   "id": "atlassian-mcp",
+   "name": "Atlassian MCP server",
+   "category": "Developer",
+   "adapter": "statuspage",
+   "statusUrl": "https://status.atlassian.com/api/v2/summary.json",
+   "pageUrl": "https://status.atlassian.com",
+   "probeUrl": "https://mcp.atlassian.com/v2/mcp"
   },
   {
    "id": "salesforce",
