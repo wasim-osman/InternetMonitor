@@ -1,0 +1,50 @@
+name: Release
+# Push a tag like v1.0.1 to publish: agents for every OS, the macOS app (Apple silicon + Intel),
+# and the Windows/Linux desktop app. The apps' auto-updater reads this release.
+on:
+  push: { tags: ['v*'] }
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  agents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: agent/go.mod }
+      - run: cd agent && go test ./... && make release
+      - uses: actions/upload-artifact@v4
+        with: { name: agents, path: agent/dist/ }
+  mac:
+    needs: agents
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: agents, path: agent/dist }
+      - run: cd app && swift test
+      - run: VERSION="${GITHUB_REF_NAME#v}" ./build-app.sh
+        if: startsWith(github.ref, 'refs/tags/')
+      - run: ./build-app.sh
+        if: "!startsWith(github.ref, 'refs/tags/')"
+      - uses: actions/upload-artifact@v4
+        with: { name: mac, path: dist/InternetMonitor-macOS-universal.zip }
+  desktop:
+    needs: agents
+    uses: ./.github/workflows/desktop.yml
+  publish:
+    needs: [agents, mac, desktop]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - name: Collect assets and checksums
+        run: |
+          mkdir release
+          find artifacts -type f \( -name 'imonitord-*' -o -name '*.zip' -o -name '*.exe' -o -name '*.msi' -o -name '*.AppImage' -o -name '*.deb' \) -exec cp {} release/ \;
+          cd release && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Publish GitHub release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "Internet Monitor $GITHUB_REF_NAME" --generate-notes

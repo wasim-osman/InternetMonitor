@@ -1,0 +1,63 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Internet Monitor",
+  "mainBinaryName": "internet-monitor",
+  "version": "1.0.0",
+  "identifier": "com.wasim.internetmonitor",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run agents && npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Internet Monitor",
+        "width": 1360,
+        "height": 860,
+        "minWidth": 1000,
+        "minHeight": 640,
+        "visible": false,
+        "theme": "Dark",
+        "backgroundColor": "#0D0F12"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "appimage", "deb", "app"],
+    "publisher": "Wasim Osman",
+    "copyright": "Copyright (c) 2026 Wasim Osman. MIT License.",
+    "category": "Utility",
+    "shortDescription": "Distributed internet latency monitor",
+    "longDescription": "Dashboard and controller for imonitord agents: discovery, pairing, latency graphs, incidents, diagnostics.",
+    "license": "MIT",
+    "homepage": "https://github.com/wasim-osman/InternetMonitor",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "resources/agents/": "agents/"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
+  }
+}

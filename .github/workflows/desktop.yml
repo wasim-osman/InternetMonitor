@@ -1,0 +1,171 @@
+# Builds the Tauri desktop app (desktop/) for Windows x64 (NSIS installer) and Linux x64 (AppImage + deb).
+#
+# Reusable: a release workflow calls it after a sibling job has uploaded the Linux agent binaries as an
+# artifact named `agents` (files imonitord-linux-{amd64,arm64,arm|armv7,386}). They are bundled as Tauri
+# resources so "Install agent via SSH" works. Outputs artifacts `desktop-windows` and `desktop-linux` with
+# predictable names (see desktop/README.md):
+#   InternetMonitor_<ver>_x64-setup.exe, InternetMonitor_<ver>_amd64.AppImage, InternetMonitor_<ver>_amd64.deb
+# plus SHA256SUMS.windows / SHA256SUMS.linux fragments (the release job concatenates them into SHA256SUMS,
+# which the in-app updater requires before it will install anything).
+name: desktop
+
+on:
+  workflow_call:
+    inputs:
+      agents-artifact:
+        description: Name of the artifact holding the Linux agent binaries
+        type: string
+        default: agents
+      require-agents:
+        description: Fail if the agents artifact is missing
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      require-agents:
+        description: Fail if the agents artifact is missing (a manual run has no sibling job)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  AGENTS_ARTIFACT: ${{ inputs.agents-artifact || 'agents' }}
+
+jobs:
+  windows:
+    name: Windows x64 (NSIS)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Download agent binaries
+        uses: actions/download-artifact@v4
+        continue-on-error: ${{ !inputs.require-agents }}
+        with:
+          name: ${{ env.AGENTS_ARTIFACT }}
+          path: desktop/src-tauri/resources/agents
+
+      - name: Normalise agent names
+        run: |
+          cd src-tauri/resources/agents
+          # only Linux node binaries are bundled (the artifact may also hold darwin/windows builds)
+          find . -type f ! -name 'imonitord-linux-*' ! -name README.txt -delete
+          [ -f imonitord-linux-armv7 ] && [ ! -f imonitord-linux-arm ] && mv imonitord-linux-armv7 imonitord-linux-arm || true
+          ls -l
+          ls imonitord-linux-* >/dev/null 2>&1 || echo "::warning::No agent binaries bundled; 'Install agent via SSH' will be unavailable"
+
+      - run: npm ci
+
+      - name: Typecheck + unit tests
+        run: |
+          npm run typecheck
+          npm test
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build NSIS installer
+        run: npx tauri build --bundles nsis
+
+      - name: Collect + rename
+        run: |
+          VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          mkdir -p out
+          EXE=$(ls src-tauri/target/release/bundle/nsis/*-setup.exe | head -1)
+          cp "$EXE" "out/InternetMonitor_${VER}_x64-setup.exe"
+          cd out && sha256sum InternetMonitor_* > SHA256SUMS.windows && cat SHA256SUMS.windows
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: desktop/out/*
+          if-no-files-found: error
+
+  linux:
+    name: Linux x64 (AppImage + deb)
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
+            build-essential curl wget file libxdo-dev libssl-dev libgtk-3-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Download agent binaries
+        uses: actions/download-artifact@v4
+        continue-on-error: ${{ !inputs.require-agents }}
+        with:
+          name: ${{ env.AGENTS_ARTIFACT }}
+          path: desktop/src-tauri/resources/agents
+
+      - name: Normalise agent names
+        run: |
+          cd src-tauri/resources/agents
+          # only Linux node binaries are bundled (the artifact may also hold darwin/windows builds)
+          find . -type f ! -name 'imonitord-linux-*' ! -name README.txt -delete
+          [ -f imonitord-linux-armv7 ] && [ ! -f imonitord-linux-arm ] && mv imonitord-linux-armv7 imonitord-linux-arm || true
+          chmod 755 imonitord-linux-* 2>/dev/null || echo "::warning::No agent binaries bundled; 'Install agent via SSH' will be unavailable"
+          ls -l
+
+      - run: npm ci
+
+      - name: Typecheck + unit tests
+        run: |
+          npm run typecheck
+          npm test
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build AppImage + deb
+        run: npx tauri build --bundles appimage,deb
+
+      - name: Collect + rename
+        run: |
+          VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          mkdir -p out
+          cp "$(ls src-tauri/target/release/bundle/appimage/*.AppImage | head -1)" "out/InternetMonitor_${VER}_amd64.AppImage"
+          cp "$(ls src-tauri/target/release/bundle/deb/*.deb | head -1)" "out/InternetMonitor_${VER}_amd64.deb"
+          chmod 755 out/*.AppImage
+          cd out && sha256sum InternetMonitor_* > SHA256SUMS.linux && cat SHA256SUMS.linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: desktop/out/*
+          if-no-files-found: error
